@@ -6,7 +6,9 @@ into an ABAP package, activate the report, and run it. Use selection option
 `P_VARI` to display and filter `/INW/EINV_MAIL_V` instead.
 
 The selection screen provides filters for every field in `/INW/EINV_MAIL` and
-language filters for translations. The ALV shows the mail configuration keys
+language filters for translations. Only data in the current client is read;
+the client filter can restrict that selection but cannot select other clients.
+The ALV shows the mail configuration keys
 and the text content. Double-click a text-content column to open its SO10
 editor/viewer. Select `P_EDIT` before execution to edit existing texts or
 create a missing translation. Select `P_NEW` and enter a name beginning with

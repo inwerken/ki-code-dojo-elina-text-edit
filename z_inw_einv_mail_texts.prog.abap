@@ -35,16 +35,17 @@ PARAMETERS:
   p_new AS CHECKBOX DEFAULT space,
   p_name TYPE thead-tdname.
 
+TYPES ty_languages TYPE STANDARD TABLE OF t002-spras WITH DEFAULT KEY.
+
+TYPES BEGIN OF ty_output.
+  INCLUDE TYPE /inw/einv_mail.
 TYPES:
-  ty_languages TYPE STANDARD TABLE OF t002-spras WITH DEFAULT KEY,
-  BEGIN OF ty_output,
-    INCLUDE TYPE /inw/einv_mail,
-    body_text TYPE string,
-    sub_text  TYPE string,
-    sig_text  TYPE string,
-    att_text  TYPE string,
-    pdf_text  TYPE string,
-  END OF ty_output.
+  body_text TYPE string,
+  sub_text  TYPE string,
+  sig_text  TYPE string,
+  att_text  TYPE string,
+  pdf_text  TYPE string,
+END OF ty_output.
 
 DATA:
   gt_output      TYPE STANDARD TABLE OF ty_output,
@@ -124,10 +125,14 @@ FORM display_variants.
   DATA lt_variants TYPE STANDARD TABLE OF /inw/einv_mail_v.
   DATA lo_variants TYPE REF TO cl_salv_table.
 
+  IF sy-mandt NOT IN sv_mandt.
+    MESSAGE 'Der aktuelle Mandant ist nicht in der Auswahl enthalten.' TYPE 'S'.
+    RETURN.
+  ENDIF.
+
   SELECT *
     FROM /inw/einv_mail_v
-    WHERE mandt IN @sv_mandt
-      AND vkorg IN @sv_vkorg
+    WHERE vkorg IN @sv_vkorg
       AND vtweg IN @sv_vtweg
       AND spart IN @sv_spart
       AND kschl IN @sv_kschl
@@ -157,10 +162,14 @@ FORM display_mail_texts.
   DATA ls_output TYPE ty_output.
   DATA lt_languages TYPE ty_languages.
 
+  IF sy-mandt NOT IN s_mandt.
+    MESSAGE 'Der aktuelle Mandant ist nicht in der Auswahl enthalten.' TYPE 'S'.
+    RETURN.
+  ENDIF.
+
   SELECT *
     FROM /inw/einv_mail
-    WHERE mandt IN @s_mandt
-      AND vkorg IN @s_vkorg
+    WHERE vkorg IN @s_vkorg
       AND vtweg IN @s_vtweg
       AND spart IN @s_spart
       AND kschl IN @s_kschl
