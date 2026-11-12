@@ -26,7 +26,7 @@ SELECT-OPTIONS:
   sv_vari FOR /inw/einv_mail_v-vari,
   sv_wert FOR /inw/einv_mail_v-wert.
 
-DATA gv_language TYPE thead-tdlanguage.
+DATA gv_language TYPE spras.
 SELECT-OPTIONS s_langu FOR gv_language.
 
 PARAMETERS:
@@ -239,7 +239,7 @@ ENDFORM.
 
 FORM read_one_text
   USING iv_name TYPE thead-tdname
-        iv_language TYPE thead-tdlanguage
+        iv_language TYPE spras
   CHANGING cv_text TYPE string.
   DATA ls_header TYPE thead.
   DATA lt_lines TYPE STANDARD TABLE OF tline.
@@ -298,7 +298,7 @@ ENDFORM.
 
 FORM edit_one_text
   USING iv_name TYPE thead-tdname
-        iv_language TYPE thead-tdlanguage
+        iv_language TYPE spras
         iv_edit TYPE abap_bool
         iv_create TYPE abap_bool.
   DATA ls_header TYPE thead.
@@ -311,12 +311,12 @@ FORM edit_one_text
   ls_header-tdobject = 'TEXT'.
   ls_header-tdid = 'ST'.
   ls_header-tdname = iv_name.
-  ls_header-tdlanguage = iv_language.
+  ls_header-tdspras = iv_language.
 
   CALL FUNCTION 'READ_TEXT'
     EXPORTING
       id       = ls_header-tdid
-      language = ls_header-tdlanguage
+      language = ls_header-tdspras
       name     = ls_header-tdname
       object   = ls_header-tdobject
     IMPORTING
@@ -333,7 +333,7 @@ FORM edit_one_text
     ls_header-tdobject = 'TEXT'.
     ls_header-tdid = 'ST'.
     ls_header-tdname = iv_name.
-    ls_header-tdlanguage = iv_language.
+    ls_header-tdspras = iv_language.
   ENDIF.
 
   IF lv_exists = abap_false AND iv_edit = abap_false.
