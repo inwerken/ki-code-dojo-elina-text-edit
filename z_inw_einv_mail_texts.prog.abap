@@ -1,6 +1,7 @@
 REPORT z_inw_einv_mail_texts.
 
 TABLES /inw/einv_mail.
+TABLES /inw/einv_mail_v.
 
 SELECT-OPTIONS:
   s_mandt FOR /inw/einv_mail-mandt,
@@ -16,15 +17,26 @@ SELECT-OPTIONS:
   s_att FOR /inw/einv_mail-att_name,
   s_pdf FOR /inw/einv_mail-pdf_name.
 
+SELECT-OPTIONS:
+  sv_mandt FOR /inw/einv_mail_v-mandt,
+  sv_vkorg FOR /inw/einv_mail_v-vkorg,
+  sv_vtweg FOR /inw/einv_mail_v-vtweg,
+  sv_spart FOR /inw/einv_mail_v-spart,
+  sv_kschl FOR /inw/einv_mail_v-kschl,
+  sv_vari FOR /inw/einv_mail_v-vari,
+  sv_wert FOR /inw/einv_mail_v-wert.
+
 DATA gv_language TYPE thead-tdlanguage.
 SELECT-OPTIONS s_langu FOR gv_language.
 
 PARAMETERS:
+  p_vari AS CHECKBOX DEFAULT space,
   p_edit AS CHECKBOX DEFAULT space,
   p_new AS CHECKBOX DEFAULT space,
   p_name TYPE thead-tdname.
 
 TYPES:
+  ty_languages TYPE STANDARD TABLE OF t002-spras WITH DEFAULT KEY,
   BEGIN OF ty_output,
     INCLUDE TYPE /inw/einv_mail,
     body_text TYPE string,
@@ -35,8 +47,9 @@ TYPES:
   END OF ty_output.
 
 DATA:
-  gt_output TYPE STANDARD TABLE OF ty_output,
-  go_alv    TYPE REF TO cl_salv_table.
+  gt_output      TYPE STANDARD TABLE OF ty_output,
+  go_alv         TYPE REF TO cl_salv_table,
+  go_alv_events  TYPE REF TO cl_salv_events_table.
 
 CLASS lcl_events DEFINITION.
   PUBLIC SECTION.
@@ -94,18 +107,55 @@ AT SELECTION-SCREEN.
   IF p_new = abap_true AND p_name(5) <> 'Z_INV'.
     MESSAGE 'Neue SO10-Texte müssen mit Z_INV beginnen.' TYPE 'E'.
   ENDIF.
+  IF p_new = abap_true AND p_vari = abap_true.
+    MESSAGE 'Neuanlage ist nur für SO10-Texte verfügbar.' TYPE 'E'.
+  ENDIF.
 
 START-OF-SELECTION.
-  IF p_new = abap_true.
+  IF p_vari = abap_true.
+    PERFORM display_variants.
+  ELSEIF p_new = abap_true.
     PERFORM create_text_for_languages USING p_name.
   ELSE.
     PERFORM display_mail_texts.
   ENDIF.
 
+FORM display_variants.
+  DATA lt_variants TYPE STANDARD TABLE OF /inw/einv_mail_v.
+  DATA lo_variants TYPE REF TO cl_salv_table.
+
+  SELECT *
+    FROM /inw/einv_mail_v
+    WHERE mandt IN @sv_mandt
+      AND vkorg IN @sv_vkorg
+      AND vtweg IN @sv_vtweg
+      AND spart IN @sv_spart
+      AND kschl IN @sv_kschl
+      AND vari IN @sv_vari
+      AND wert IN @sv_wert
+    INTO TABLE @lt_variants.
+
+  IF sy-subrc <> 0.
+    MESSAGE 'Keine passenden Varianten gefunden.' TYPE 'S'.
+    RETURN.
+  ENDIF.
+
+  TRY.
+      cl_salv_table=>factory(
+        IMPORTING r_salv_table = lo_variants
+        CHANGING  t_table      = lt_variants ).
+      lo_variants->get_functions( )->set_all( abap_true ).
+      lo_variants->get_columns( )->set_optimize( abap_true ).
+      lo_variants->display( ).
+    CATCH cx_salv_error INTO DATA(lx_variants).
+      MESSAGE lx_variants->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
+  ENDTRY.
+ENDFORM.
+
 FORM display_mail_texts.
   DATA lt_mail TYPE STANDARD TABLE OF /inw/einv_mail.
   DATA ls_output TYPE ty_output.
-  DATA lt_languages TYPE STANDARD TABLE OF t002-spras.
+  DATA lt_languages TYPE ty_languages.
 
   SELECT *
     FROM /inw/einv_mail
@@ -150,17 +200,23 @@ FORM display_mail_texts.
         CHANGING  t_table      = gt_output ).
       go_alv->get_functions( )->set_all( abap_true ).
       go_alv->get_columns( )->set_optimize( abap_true ).
+      go_alv->get_columns( )->get_column( 'BODY_TEXT' )->set_short_text( 'Mail body' ).
+      go_alv->get_columns( )->get_column( 'SUB_TEXT' )->set_short_text( 'Subject' ).
+      go_alv->get_columns( )->get_column( 'SIG_TEXT' )->set_short_text( 'Signature' ).
+      go_alv->get_columns( )->get_column( 'ATT_TEXT' )->set_short_text( 'Attachment' ).
+      go_alv->get_columns( )->get_column( 'PDF_TEXT' )->set_short_text( 'PDF' ).
       go_events = NEW lcl_events( ).
-      SET HANDLER go_events->on_double_click FOR go_alv->get_event( ).
+      go_alv_events = go_alv->get_event( ).
+      SET HANDLER go_events->on_double_click FOR go_alv_events.
       go_alv->display( ).
-    CATCH cx_salv_msg INTO DATA(lx_salv).
+    CATCH cx_salv_error INTO DATA(lx_salv).
       MESSAGE lx_salv->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
   ENDTRY.
 ENDFORM.
 
 FORM read_text_for_languages
   USING iv_name TYPE thead-tdname
-        it_languages TYPE STANDARD TABLE
+        it_languages TYPE ty_languages
   CHANGING cv_text TYPE string.
   DATA lv_language TYPE t002-spras.
   DATA lv_text TYPE string.
@@ -217,36 +273,40 @@ FORM read_one_text
 ENDFORM.
 
 FORM open_text_for_languages USING iv_name TYPE thead-tdname.
-  DATA lt_languages TYPE STANDARD TABLE OF t002-spras.
+  DATA lt_languages TYPE ty_languages.
   SELECT spras
     FROM t002
     WHERE spras IN @s_langu
     INTO TABLE @lt_languages.
 
   LOOP AT lt_languages INTO DATA(lv_language).
-    PERFORM edit_one_text USING iv_name lv_language p_edit.
+    PERFORM edit_one_text USING iv_name lv_language p_edit abap_false.
   ENDLOOP.
 ENDFORM.
 
 FORM create_text_for_languages USING iv_name TYPE thead-tdname.
-  DATA lt_languages TYPE STANDARD TABLE OF t002-spras.
+  DATA lt_languages TYPE ty_languages.
   SELECT spras
     FROM t002
     WHERE spras IN @s_langu
     INTO TABLE @lt_languages.
 
   LOOP AT lt_languages INTO DATA(lv_language).
-    PERFORM edit_one_text USING iv_name lv_language abap_true.
+    PERFORM edit_one_text USING iv_name lv_language abap_true abap_true.
   ENDLOOP.
 ENDFORM.
 
 FORM edit_one_text
   USING iv_name TYPE thead-tdname
         iv_language TYPE thead-tdlanguage
-        iv_edit TYPE abap_bool.
+        iv_edit TYPE abap_bool
+        iv_create TYPE abap_bool.
   DATA ls_header TYPE thead.
   DATA lt_lines TYPE STANDARD TABLE OF tline.
   DATA lv_exists TYPE abap_bool VALUE abap_true.
+  DATA lv_display TYPE c LENGTH 1.
+  DATA lv_save TYPE c LENGTH 1.
+  DATA lv_insert TYPE c LENGTH 1.
 
   ls_header-tdobject = 'TEXT'.
   ls_header-tdid = 'ST'.
@@ -269,6 +329,11 @@ FORM edit_one_text
   IF sy-subrc <> 0.
     lv_exists = abap_false.
     CLEAR lt_lines.
+    CLEAR ls_header.
+    ls_header-tdobject = 'TEXT'.
+    ls_header-tdid = 'ST'.
+    ls_header-tdname = iv_name.
+    ls_header-tdlanguage = iv_language.
   ENDIF.
 
   IF lv_exists = abap_false AND iv_edit = abap_false.
@@ -280,13 +345,19 @@ FORM edit_one_text
     MESSAGE 'Bearbeiten ist nur für SO10-Texte mit Präfix Z_INV erlaubt.' TYPE 'S' DISPLAY LIKE 'E'.
     RETURN.
   ENDIF.
+  IF iv_create = abap_true AND lv_exists = abap_true.
+    MESSAGE |SO10-Text { iv_name } ist in Sprache { iv_language } bereits vorhanden.| TYPE 'S' DISPLAY LIKE 'E'.
+    RETURN.
+  ENDIF.
 
+  lv_display = COND #( WHEN iv_edit = abap_true THEN space ELSE 'X' ).
+  lv_save = iv_edit.
   CALL FUNCTION 'EDIT_TEXT'
     EXPORTING
-      display      = COND c( WHEN iv_edit = abap_true THEN space ELSE 'X' )
+      display      = lv_display
       editor_title = |SO10 { iv_name } ({ iv_language })|
       header       = ls_header
-      save         = iv_edit
+      save         = lv_save
     TABLES
       lines        = lt_lines
     EXCEPTIONS
@@ -299,10 +370,11 @@ FORM edit_one_text
     RETURN.
   ENDIF.
 
+  lv_insert = COND #( WHEN lv_exists = abap_true THEN space ELSE 'X' ).
   CALL FUNCTION 'SAVE_TEXT'
     EXPORTING
       header          = ls_header
-      insert          = COND c( WHEN lv_exists = abap_true THEN space ELSE 'X' )
+      insert          = lv_insert
       savemode_direct = abap_true
     TABLES
       lines           = lt_lines
